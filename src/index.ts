@@ -122,7 +122,7 @@ class AI302Server {
 
   private getApiInstance(request?: any): AI302Api {
     const apiKey =
-      ai302ApiKey ||
+      (ai302ApiKey && ai302ApiKey !== "YOUR_API_KEY_HERE") ||
       (request && getAuthValue(request, "302AI_API_KEY")) ||
       process.env["302AI_API_KEY"];
     if (!apiKey) {
