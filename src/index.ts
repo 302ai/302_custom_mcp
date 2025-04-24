@@ -91,7 +91,7 @@ class AI302Server {
     this.server = new Server(
       {
         name: "302ai-custom-mcp",
-        version: "0.1.0",
+        version: "0.1.2",
       },
       {
         capabilities: {
@@ -122,7 +122,7 @@ class AI302Server {
 
   private getApiInstance(request?: any): AI302Api {
     const apiKey =
-      (ai302ApiKey && ai302ApiKey !== "YOUR_API_KEY_HERE") ||
+      (ai302ApiKey !== "YOUR_API_KEY_HERE" && ai302ApiKey) ||
       (request && getAuthValue(request, "302AI_API_KEY")) ||
       process.env["302AI_API_KEY"];
     if (!apiKey) {
