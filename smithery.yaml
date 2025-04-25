@@ -13,6 +13,7 @@ startCommand:
         "build/index.js"
       ],
       "env": {
-        "302AI_API_KEY": "YOUR_API_KEY"
+        "302AI_API_KEY": "YOUR_API_KEY",
+        "LANGUAGE": "YOUR_LANGUAGE"
       }
     })

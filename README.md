@@ -82,7 +82,8 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
       "command": "npx",
       "args": ["-y", "@302ai/custom-mcp"],
       "env": {
-        "302AI_API_KEY": "YOUR_API_KEY_HERE"
+        "302AI_API_KEY": "YOUR_API_KEY_HERE",
+        "LANGUAGE": "YOUR_LANGUAGE_HERE"
       }
     }
   }

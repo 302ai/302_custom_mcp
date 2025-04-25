@@ -14,6 +14,7 @@ import { RestServerTransport } from "@chatmcp/sdk/server/rest.js";
 import dotenv from "dotenv";
 // support for mcp.so
 const ai302ApiKey = getParamValue("302ai_api_key");
+const languageParam = getParamValue("language");
 const mode = getParamValue("mode") || "stdio";
 const port = getParamValue("port") || 9593;
 const endpoint = getParamValue("endpoint") || "/rest";
@@ -37,10 +38,16 @@ class AI302Api {
     return this.apiKey;
   }
 
-  async listTools(): Promise<Tool[]> {
+  async listTools(language?: string): Promise<Tool[]> {
+    const url = new URL(`${this.baseUrl}/list-tools/custom`);
+    
+    if (language) {
+      url.searchParams.append('lang', language);
+    }
+
     const { data, error } = await betterFetch<{
       tools: Tool[];
-    }>(`${this.baseUrl}/list-tools/custom`, {
+    }>(url.toString(), {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "x-api-key": this.apiKey,
@@ -91,7 +98,7 @@ class AI302Server {
     this.server = new Server(
       {
         name: "302ai-custom-mcp",
-        version: "0.1.2",
+        version: "0.1.3",
       },
       {
         capabilities: {
@@ -139,11 +146,20 @@ class AI302Server {
     return this.api;
   }
 
+  private getLanguage(request?: any): string | undefined {
+    return (
+      (languageParam !== "YOUR_LANGUAGE_HERE" && languageParam) ||
+      (request && getAuthValue(request, "LANGUAGE")) ||
+      process.env.LANGUAGE
+    );
+  }
+
   private async setupToolHandlers(): Promise<void> {
     this.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
       // Re-fetch tools with request-specific API key if available
       const api = this.getApiInstance(request);
-      const tools = await api.listTools();
+      const language = this.getLanguage(request);
+      const tools = await api.listTools(language);
       return { tools };
     });
 

@@ -5,6 +5,9 @@ params:
     302AI_API_KEY:
       type: string
       description: 302AI API Key
+    LANGUAGE:
+      type: string
+      description: Language to use for the MCP
   required:
     - 302AI_API_KEY
  
@@ -15,7 +18,7 @@ rest:
  
 npx:
   command:
-    | 302AI_API_KEY={302AI_API_KEY} npx -y @302ai/custom-mcp
+    | 302AI_API_KEY={302AI_API_KEY} LANGUAGE={LANGUAGE} npx -y @302ai/custom-mcp
   config:
     | {
         "mcpServers": {
@@ -26,7 +29,8 @@ npx:
               "@302ai/custom-mcp"
             ],
             "env": {
-              "302AI_API_KEY": "YOUR_API_KEY_HERE"
+              "302AI_API_KEY": "YOUR_API_KEY_HERE",
+              "LANGUAGE": "YOUR_LANGUAGE_HERE"
             }
           }
         }
@@ -34,7 +38,7 @@ npx:
  
 docker:
   command:
-    | docker run -i --rm -e 302AI_API_KEY={302AI_API_KEY} mcp/302ai-custom-mcp
+    | docker run -i --rm -e 302AI_API_KEY={302AI_API_KEY} -e LANGUAGE={LANGUAGE} mcp/302ai-custom-mcp
   config:
     | {
         "mcpServers": {
@@ -49,7 +53,8 @@ docker:
               "mcp/302ai-custom-mcp"
             ],
             "env": {
-              "302AI_API_KEY": "YOUR_API_KEY_HERE"
+              "302AI_API_KEY": "YOUR_API_KEY_HERE",
+              "LANGUAGE": "YOUR_LANGUAGE_HERE"
             }
           }
         }
