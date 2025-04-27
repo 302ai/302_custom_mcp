@@ -3,17 +3,22 @@ import { getParamValue, getAuthValue } from "@chatmcp/sdk/utils/index.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
   ErrorCode,
   McpError,
   Tool,
+  isInitializeRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import { betterFetch } from "@better-fetch/fetch";
 import { RestServerTransport } from "@chatmcp/sdk/server/rest.js";
 import dotenv from "dotenv";
 import express, { Request, Response } from "express";
+import { randomUUID } from "crypto";
+import bodyParser from "body-parser";
+import getRawBody from "raw-body";
 
 // support for mcp.so
 const ai302ApiKey = getParamValue("302ai_api_key");
@@ -21,6 +26,7 @@ const languageParam = getParamValue("language");
 const mode = getParamValue("mode") || "stdio";
 const port = getParamValue("port") || 9593;
 const endpoint = getParamValue("endpoint") || "/rest";
+const httpEndpoint = getParamValue("http_endpoint") || "/mcp";
 
 dotenv.config();
 
@@ -98,7 +104,9 @@ class AI302Api {
 class AI302Server {
   private server: Server;
   private api: AI302Api | null = null;
-  private transports: { [sessionId: string]: SSEServerTransport } = {};
+  private transports: { [sessionId: string]: SSEServerTransport | StreamableHTTPServerTransport } = {};
+  // Store API keys by session ID
+  private sessionApiKeys: { [sessionId: string]: string } = {};
 
   constructor() {
     this.server = new Server(
@@ -133,7 +141,7 @@ class AI302Server {
     this.setupToolHandlers();
   }
 
-  private getApiInstance(request?: any, extra?: { authInfo?: Record<string, any> }): AI302Api {
+  private getApiInstance(request?: any, extra?: { authInfo?: Record<string, any>, sessionId?: string }): AI302Api {
     console.log("getApiInstance received extra:", JSON.stringify(extra, null, 2));
     // 1. Check extra.authInfo parameter
     const apiKeyFromExtra = extra?.authInfo?.["302AI_API_KEY"];
@@ -165,8 +173,20 @@ class AI302Server {
       }
       return this.api;
     }
+    
+    // 4. Check for sessionId in extra directly (this matches the actual structure)
+    if (extra && extra.sessionId) {
+      const apiKeyFromSession = this.sessionApiKeys[extra.sessionId];
+      if (apiKeyFromSession) {
+        console.log(`Using API key from session storage for session: ${extra.sessionId}`);
+        if (!this.api || this.api.getApiKey() !== apiKeyFromSession) {
+          this.api = new AI302Api(apiKeyFromSession);
+        }
+        return this.api;
+      }
+    }
 
-    // 4. Check environment variable
+    // 5. Check environment variable
     const apiKeyFromEnv = process.env["302AI_API_KEY"];
     if (apiKeyFromEnv) {
       console.log("Using API key from environment variable");
@@ -219,11 +239,14 @@ class AI302Server {
 
   private async setupToolHandlers(): Promise<void> {
     this.server.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
-      console.log("Entered ListToolsRequest handler with extra:", JSON.stringify(extra));
+      console.log("Entered ListToolsRequest handler with extra:", JSON.stringify(extra, null, 2));
+      console.log("ListToolsRequestSchema extra:", JSON.stringify(extra, null, 2));
       let api: AI302Api;
       let language: string | undefined;
       try {
         console.log("Attempting to get API instance in ListToolsRequest handler");
+        
+        // No need to modify the request object, just pass extra with sessionId directly
         api = this.getApiInstance(request, extra);
         console.log("Successfully got API instance in ListToolsRequest handler");
         language = this.getLanguage(request, extra);
@@ -238,8 +261,10 @@ class AI302Server {
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-      console.log("Entered CallToolRequest handler with extra:", JSON.stringify(extra));
+      console.log("Entered CallToolRequest handler with extra:", JSON.stringify(extra, null, 2));
+      console.log("CallToolRequestSchema extra:", JSON.stringify(extra, null, 2));
       try {
+        // No need to modify the request object, just pass extra with sessionId directly
         const api = this.getApiInstance(request, extra);
         console.log("Successfully got API instance in CallToolRequest handler");
 
@@ -311,6 +336,7 @@ class AI302Server {
         }
       });
 
+      // Handle SSE messages
       // Apply express.json() middleware ONLY to the /messages route
       app.post("/messages", express.json(), async (req: Request, res: Response) => {
         const sessionId = req.query.sessionId as string;
@@ -339,15 +365,23 @@ class AI302Server {
                 extra.authInfo = authData;
             }
 
-            console.log(`Calling handleMessage for session ID: ${sessionId} with extra:`, JSON.stringify(extra)); // Added log
+            console.log(`Handling message for session ID: ${sessionId} with extra:`, JSON.stringify(extra));
 
-            // Call handleMessage directly, passing the parsed body and extra auth info
-            // Using type assertion to 'any' to bypass strict unexported type check
-            await transport.handleMessage(req.body, extra as any);
-            console.log(`handleMessage successful for session ID: ${sessionId}`); // Added log
-            // Send response manually as handleMessage doesn't
-            if (!res.headersSent) {
-                res.writeHead(202).end("Accepted");
+            // Check if the transport is SSEServerTransport and has handleMessage
+            if (transport instanceof SSEServerTransport) {
+              // Call handleMessage directly, passing the parsed body and extra auth info
+              await transport.handleMessage(req.body, extra as any);
+              console.log(`handleMessage successful for session ID: ${sessionId}`);
+              // Send response manually as handleMessage doesn't
+              if (!res.headersSent) {
+                  res.writeHead(202).end("Accepted");
+              }
+            } else {
+              // This should never happen, as only SSEServerTransport should be mapped to /messages
+              console.error(`Unexpected transport type for /messages endpoint: ${transport.constructor.name}`);
+              if (!res.headersSent) {
+                res.status(500).send('Internal Server Error: Unexpected transport type');
+              }
             }
           } catch (error) {
              console.error(`Error handling POST message for session ${sessionId}:`, error instanceof Error ? error.stack : error); // Enhanced log
@@ -365,14 +399,110 @@ class AI302Server {
         console.log(`SSE server listening on port ${port}. Use endpoint /sse for connections.`);
       });
       return;
-    }
+    } else if (mode === "streamable-http") {
+      const app = express();
+      // Use express.json() middleware to parse the body for us
+      app.use(express.json());
+      
+      // Handle POST requests for client-to-server communication
+      app.post(httpEndpoint, async (req: Request, res: Response) => {
+        try {
+          // Log request parameters
+          const params = req.params;
+          console.log("Request params:", JSON.stringify(params, null, 2));
+          console.log("Request query:", JSON.stringify(req.query, null, 2));
+          console.log("Request body:", JSON.stringify(req.body, null, 2));
+          
+          // The express.json() middleware has already parsed the body into req.body
+          const parsedBody = req.body;
+          console.log("Request body parsed by middleware:", JSON.stringify(parsedBody, null, 2));
+          
+          // Check for existing session ID
+          const sessionId = req.headers['mcp-session-id'] as string | undefined;
+          let transport: StreamableHTTPServerTransport;
 
-    // Default to stdio for local mcp server or if mode is unspecified/stdio
-    console.log("Starting server with Stdio transport.");
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+          if (sessionId && this.transports[sessionId]) {
+            // Reuse existing transport
+            transport = this.transports[sessionId] as StreamableHTTPServerTransport;
+            console.log(`Using existing session: ${sessionId}`);
+            
+            // Update API key for existing session if provided in query
+            if (req.query['x-api-key']) {
+              this.sessionApiKeys[sessionId] = req.query['x-api-key'] as string;
+              console.log(`Updated API key for session: ${sessionId}`);
+            }
+          } else if (!sessionId && isInitializeRequest(req.body)) { // Use req.body here
+            // New initialization request
+            console.log(`Creating new StreamableHTTP session for initialize request`);
+            
+            // Extract auth info from headers or query params
+            const apiKey = req.headers['x-api-key'] as string | undefined || req.query['x-api-key'] as string | undefined;
+            const language = req.headers['accept-language'] as string | undefined;
+            
+            console.log(`Extracted API Key from request: ${apiKey ? '***' : 'Not Found'}`);
+            
+            transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => randomUUID(),
+              onsessioninitialized: (sessionId) => {
+                console.log(`StreamableHTTP session initialized with ID: ${sessionId}`);
+                
+                // Store the transport by session ID
+                this.transports[sessionId] = transport;
+                
+                // Store API key by session ID if available
+                if (apiKey) {
+                  this.sessionApiKeys[sessionId] = apiKey;
+                  console.log(`Stored API key for new session: ${sessionId}`);
+                }
+              }
+            });
+
+            // Clean up transport when closed
+            transport.onclose = () => {
+              if (transport.sessionId) {
+                console.log(`Closing StreamableHTTP session: ${transport.sessionId}`);
+                delete this.transports[transport.sessionId];
+                delete this.sessionApiKeys[transport.sessionId];
+              }
+            };
+
+            console.log(`Connecting new StreamableHTTP transport to server`);
+            // Connect to the MCP server
+            await this.server.connect(transport);
+          } else {
+            // Invalid request
+            console.log(`Invalid StreamableHTTP request: no valid session ID for non-initialize request`);
+            res.status(400).json({
+              jsonrpc: '2.0',
+              error: {
+                code: -32000,
+                message: 'Bad Request: No valid session ID provided',
+              },
+              id: null,
+            });
+            return;
+          }
+
+          console.log(`Handling StreamableHTTP request for session ID: ${transport.sessionId}`);
+          
+          // DO NOT modify the parsed body, just pass it directly
+          await transport.handleRequest(req, res, parsedBody);
+            
+        } catch (error) {
+          console.error(`Error handling StreamableHTTP request:`, error instanceof Error ? error.stack : error);
+          if (!res.headersSent) {
+            res.status(500).send('Internal Server Error handling message');
+          }
+        }
+      });
+
+      app.listen(Number(port), () => {
+        console.log(`StreamableHTTP server listening on port ${port}. Use endpoint ${httpEndpoint} for connections.`);
+      });
+      return;
+    }
   }
 }
 
 const server = new AI302Server();
-server.run().catch(console.error);
+server.run();
