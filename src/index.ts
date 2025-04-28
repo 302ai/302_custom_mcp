@@ -112,7 +112,7 @@ class AI302Server {
     this.server = new Server(
       {
         name: "302ai-custom-mcp",
-        version: "0.1.3",
+        version: "0.1.4",
       },
       {
         capabilities: {
