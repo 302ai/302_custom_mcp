@@ -114,7 +114,7 @@ class AI302Server {
     this.server = new Server(
       {
         name: "302ai-custom-mcp",
-        version: "0.1.4",
+        version: "0.1.5",
       },
       {
         capabilities: {
@@ -618,7 +618,7 @@ class AI302Server {
       });
       return;
     }
-    
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
   }
