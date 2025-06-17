@@ -17,8 +17,6 @@ import { RestServerTransport } from "@chatmcp/sdk/server/rest.js";
 import dotenv from "dotenv";
 import express, { Request, Response } from "express";
 import { randomUUID } from "crypto";
-import bodyParser from "body-parser";
-import getRawBody from "raw-body";
 
 // support for mcp.so
 const ai302ApiKey = getParamValue("302ai_api_key");
@@ -29,10 +27,6 @@ const endpoint = getParamValue("endpoint") || "/rest";
 const httpEndpoint = getParamValue("http_endpoint") || "/mcp";
 
 dotenv.config();
-
-interface ToolCallResponse {
-  content: any
-}
 
 class AI302Api {
   private baseUrl = process.env.BASE_URL || "https://api.302.ai/mcp";
@@ -74,8 +68,8 @@ class AI302Api {
     return data.tools;
   }
 
-  async callTool(name: string, arguments_: any): Promise<ToolCallResponse> {
-    const { data, error } = await betterFetch<ToolCallResponse>(
+  async callTool(name: string, arguments_: any): Promise<any> {
+    const { data, error } = await betterFetch<any>(
       `${this.baseUrl}/v1/tool/call`,
       {
         method: "POST",
@@ -326,7 +320,7 @@ class AI302Server {
             JSON.stringify(toolArgs, null, 2),
           );
 
-          const { content } = await api.callTool(toolName, toolArgs);
+          const content = await api.callTool(toolName, toolArgs);
           console.log("Successfully called tool in CallToolRequest handler");
           console.log(`Backend tool result:`, JSON.stringify(content, null, 2));
 
