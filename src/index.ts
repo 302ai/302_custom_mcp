@@ -31,8 +31,7 @@ const httpEndpoint = getParamValue("http_endpoint") || "/mcp";
 dotenv.config();
 
 interface ToolCallResponse {
-  result: any;
-  logs: any;
+  content: any
 }
 
 class AI302Api {
@@ -117,7 +116,7 @@ class AI302Server {
     this.server = new Server(
       {
         name: "302ai-custom-mcp",
-        version: "0.1.6",
+        version: "0.1.7",
       },
       {
         capabilities: {
@@ -327,16 +326,15 @@ class AI302Server {
             JSON.stringify(toolArgs, null, 2),
           );
 
-          const { result, logs } = await api.callTool(toolName, toolArgs);
+          const { content } = await api.callTool(toolName, toolArgs);
           console.log("Successfully called tool in CallToolRequest handler");
-          console.log(`Backend tool result:`, JSON.stringify(result, null, 2));
-          console.log(`Backend tool logs:`, JSON.stringify(logs, null, 2));
+          console.log(`Backend tool result:`, JSON.stringify(content, null, 2));
 
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ result, logs }, null, 2),
+                text: JSON.stringify({ content }, null, 2),
               },
             ],
           };

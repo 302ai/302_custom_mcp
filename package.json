@@ -1,6 +1,6 @@
 {
   "name": "@302ai/custom-mcp",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "A Model Context Protocol server",
   "type": "module",
   "publishConfig": {
