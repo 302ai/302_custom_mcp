@@ -48,7 +48,9 @@ class AI302Api {
   }
 
   async listTools(language?: string): Promise<Tool[]> {
-    const url = new URL(`${this.baseUrl}/list-tools/custom`);
+    const url = new URL(`${this.baseUrl}/v1/tool/api-key`);
+
+    url.searchParams.append("apiKey", this.apiKey);
 
     if (language) {
       url.searchParams.append("lang", language);
@@ -75,7 +77,7 @@ class AI302Api {
 
   async callTool(name: string, arguments_: any): Promise<ToolCallResponse> {
     const { data, error } = await betterFetch<ToolCallResponse>(
-      `${this.baseUrl}/call-tool/${name}`,
+      `${this.baseUrl}/v1/tool/call`,
       {
         method: "POST",
         headers: {
@@ -83,6 +85,7 @@ class AI302Api {
           "x-api-key": this.apiKey,
         },
         body: {
+          nameOrId: name,
           arguments: arguments_,
         },
       },
@@ -114,7 +117,7 @@ class AI302Server {
     this.server = new Server(
       {
         name: "302ai-custom-mcp",
-        version: "0.1.5",
+        version: "0.1.6",
       },
       {
         capabilities: {
