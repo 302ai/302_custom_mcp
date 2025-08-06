@@ -6,7 +6,7 @@
 
 <p align="center"><a href="README_zh.md">中文</a> | <a href="README.md">English</a> | <a href="README_ja.md">日本語</a></p>
 
-![](docs/302_AI_Custom_MCP_Server.jpg) 
+![](docs/302_AI_Custom_MCP_Server.png) 
 
 ## 使用教程
 打开菜单中的MCP Server   
